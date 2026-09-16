@@ -1,7 +1,0 @@
-› [cb-333] first paragraph of the question
-
-  a second paragraph after a blank line
-
-• The real answer.
-
-› Ask Codex to do anything

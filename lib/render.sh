@@ -15,9 +15,10 @@ hits=[i for i,l in enumerate(lines) if marker in l]
 if not hits:
     sys.exit(1)                      # no marker = extraction failed, not an empty answer
 
-# The marker is unique per request, so this request is echoed on the first line
-# carrying it next to the prompt glyph. Anchoring on the FIRST echo (not the
-# last) keeps the answer intact when it quotes the question back.
+# The marker is unique per request, so the echo is the line that carries it
+# next to the prompt glyph. Selecting echo lines is what protects the answer
+# when it quotes the question back: that quote carries the marker too, but not
+# the glyph, so it is not mistaken for the start of the answer.
 echoes=[i for i in hits if "›" in lines[i]]
 start=echoes[0] if echoes else hits[0]
 

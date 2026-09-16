@@ -1,8 +1,0 @@
-› [cb-777-888-999] a question long enough that the terminal wraps it across
-  a second line of the question
-  and a third line
-
-• First line of the answer.
-  Second line of the answer.
-
-› Ask Codex to do anything

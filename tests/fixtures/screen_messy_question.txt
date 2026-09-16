@@ -1,0 +1,10 @@
+› [cb-777] a question long enough that the terminal wraps it onto
+  a second line, and which also contains a bullet list:
+
+  • first constraint
+  • second constraint
+
+• First line of the answer.
+  Second line of the answer.
+
+› Ask Codex to do anything
