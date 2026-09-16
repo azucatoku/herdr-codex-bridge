@@ -1,85 +1,109 @@
-# codex-bridge 설계 노트
+# Design notes
 
-README 가 "무엇을 하는가"를 다룬다면, 이 문서는 **"왜 이렇게 만들었는가"** 만 다룬다.
-사용법·옵션·종료코드는 README 를 본다.
+The README covers *what this does*. This file covers *why it is built this way*.
+Usage, options and exit codes live in the README, not here.
 
-## 해결하려는 실제 문제
+## The problems it exists for
 
-`herdr agent prompt` 를 그냥 부르면 다음이 전부 **조용히** 어긋난다. 모두 실측된 것이다.
+Calling `herdr agent prompt` directly fails **silently** in several ways. Every
+item below was observed in practice.
 
-1. 응답이 `agent_prompted` 여도 텍스트가 전달되지 않을 수 있다.
-2. 전달돼도 Enter 가 눌리지 않아 입력창에 머무를 수 있다.
-3. 응답의 `revision` 은 입력 반영 전 스냅샷이라 전달 판정에 쓸 수 없다.
-4. 이미 에이전트가 떠 있는 패널에 `herdr pane run` 을 보내면 셸이 아니라 그 TUI 의
-   입력창으로 들어간다.
-5. Ctrl-C 직후 터미널 응답 시퀀스(`9;5:1u`)가 남아 다음 명령을 깨뜨린다.
-6. `herdr pane read` 출력에 TUI 장식이 섞여 답변만 뽑기 어렵다.
+1. A response of `agent_prompted` does not mean the text arrived.
+2. Text can land in the input box without ever being submitted.
+3. The `revision` field is a snapshot taken before the input is applied, so it
+   cannot confirm delivery.
+4. Sending a command to a pane that already runs an agent types it into that
+   agent's TUI, not the shell.
+5. A terminal reply sequence left over from `Ctrl-C` (`9;5:1u`) corrupts the
+   next command.
+6. Answers arrive buried in TUI chrome.
 
-## 상관 마커 — 설계의 중심
+## The correlation marker
 
-근본 문제는 **관측한 화면과 상태를 "이번 요청"에 귀속시킬 방법이 없다**는 것이다.
-scrollback 에 같은 질문이 있거나, 이전 요청 때문에 `working` 이거나, 빠르게 끝난
-요청이면 전부 오판한다.
+The underlying problem is that **an observed screen or status cannot be
+attributed to a particular request**. An identical question sitting in the
+scrollback, a `working` state left from an earlier call, a request that finished
+before the first poll — each of them reads as success.
 
-그래서 요청마다 고유 마커를 질문 앞에 붙인다.
+So every request carries a unique marker, prepended to the question:
 
 ```
-[cb:cb-12345-1757930000-4821] 실제 질문 내용...
+[cb:cb-12345-1757930000-4821] the actual question...
 ```
 
-| 관측 | 판정 |
+| Observation | Meaning |
 |---|---|
-| 화면에 마커 없음 | 전달 확인 실패 (늦게 도착했을 수 있으므로 "전달 안 됨"으로 단정하지 않는다) |
-| 마커가 입력 에코(`›`) 줄에 있음 | 제출됨 |
-| 마커가 있는데 입력창에 머물러 있음 | 삽입만 됨 → Enter 필요 |
-| 마커 에코 줄 이후 첫 `•`/`⚠` 부터 다음 `›` 전까지 | **이번 요청의 답변** |
+| Marker absent from the screen | Delivery unconfirmed — it may still be in flight, so never reported as "not sent" |
+| Marker on an echo line (`›`) | Submitted |
+| Marker present but still in the input box | Inserted only — needs Enter |
+| From the first column-0 `•`/`⚠` after the echo, to the next `›` | **this request's answer** |
 
-`inserted` 와 `submitted` 를 구분하지 않으면 이미 제출된 요청에 Enter 를 한 번 더 보내
-빈 요청을 만든다. 마커가 입력창에 남아 있다는 증거가 있을 때만 1회 보낸다.
+Two details that look like nitpicks and are not:
 
-## 재전송하지 않는다
+- The answer is anchored on the **first** echo carrying the marker, not the
+  last. An answer that quotes the question back would otherwise lose everything
+  before the quote.
+- The opening bullet must be at **column 0**. The TUI indents the continuation
+  lines of a multi-line question, so an indented bullet is still the question.
+  Matching after `lstrip()` makes any question containing a bullet list return
+  part of itself as the answer.
 
-첫 전송이 단지 느렸을 뿐인데 재전송하면 같은 질문이 두 번 실행된다. 그래서 전달
-확인에 실패하면 그대로 끝낸다. 코드 4 의 의미는 "전달 실패"가 아니라
-**"전달 확인 실패 — 실제로는 전달됐을 수 있음"** 이다.
+`inserted` and `submitted` are tracked separately. Collapsing them sends a
+stray Enter to an already-submitted request, which fires an empty one.
 
-## 경계
+Completion is **not** covered by the marker: it comes from the agent returning
+to `idle`/`done`. That signal can arrive before the text is flushed, which is
+why the answer is re-read a few times before an empty result is accepted.
 
-- `lib/herdr.sh` 가 herdr 를 호출하는 유일한 파일이다. herdr 의 **JSON 필드명과
-  종료코드**는 이 파일 밖으로 나가지 않는다.
+## It never resends
 
-  상태 문자열은 다르다. 어댑터가 `idle|working|done|none` 이라는 **정규화된 어휘**를
-  정의하고, 호출부는 그 어휘와 비교한다. 지금은 이 값들이 herdr 의 원시 값과 우연히
-  같아서 경계가 보이지 않지만, herdr 이 `working` 을 `busy` 로 바꾸면 `herdr.sh` 에서
-  매핑하면 되고 호출부는 그대로다. 경계는 "문자열이 안 새는 것"이 아니라 "어휘를
-  어댑터가 소유하는 것"이다.
-- `lib/render.sh` 는 순수 함수다. herdr 를 호출하지 않는다.
-- 종료코드 매핑은 `bin/codex-bridge` 의 몫이다. `lib/` 는 성패만 돌려준다.
+If the first send was merely slow, resending runs the same question twice. So a
+failed delivery check ends the run. That is why exit code 4 means **"delivery
+unconfirmed — it may well have arrived"**, not "delivery failed"; the wording is
+load-bearing, because the natural reaction to "failed" is to retry.
 
-## 왜 `codex exec` 가 아니라 대화형 TUI 인가
+## Boundaries
 
-`codex exec -s read-only -a never -C DIR PROMPT` 는 답을 바로 돌려준다. 그렇게 하면
-herdr 전달·마커·화면 파싱·기동 로직이 전부 사라진다. 실제로 더 단순하다.
+- `lib/herdr.sh` is the only file that calls herdr. Its **JSON field names and
+  exit codes** never leave it.
 
-그런데도 TUI 를 쓰는 이유는 **여러 번 주고받는 문맥**이다. 조언자는 앞 질문과 그
-답을 기억한 채로 다음 질문을 받아야 한다("아까 지적한 것 중 2번은 이렇게 고쳤는데
-어떤가"). `exec` 는 호출마다 새 프로세스라 그 맥락이 없다. 사람이 보는 패널이
-남는다는 것도 같은 이유로 의도된 것이다.
+  Status strings are a different matter. The adapter defines a normalized
+  vocabulary — `idle|working|done|none` — and callers compare against *that*.
+  Today those values happen to match herdr's own, which hides the seam; if herdr
+  renamed `working` to `busy`, the mapping would change in `herdr.sh` and every
+  caller would stay put. The boundary is not "no strings escape", it is "the
+  adapter owns the vocabulary".
+- `lib/render.sh` is pure. It never calls herdr.
+- Mapping outcomes to exit codes belongs to `bin/codex-bridge`. The libraries
+  return success or failure.
 
-바꿔 말하면 **이 도구의 복잡성은 전부 "지속되는 대화"의 대가다.** 한 번 묻고 끝나는
-용도라면 `codex exec` 를 직접 부르는 편이 낫다.
+## Why an interactive TUI and not `codex exec`
 
-## 기존 에이전트를 죽이지 않는다
+`codex exec -s read-only -a never -C DIR PROMPT` returns an answer directly.
+Going that way would delete the herdr delivery, the marker, the screen parsing
+and the startup logic. It is genuinely simpler.
 
-작업 중인 세션을 파괴할 수 있으므로 `start` 는 기본적으로 거절하고, `--replace` 를
-줬을 때만 교체한다.
+The reason for the TUI is **multi-turn context**. An advisor has to answer the
+next question while remembering the last one and its own reply ("of the three
+things you raised, I fixed the second like this — better?"). `exec` starts a new
+process per call and has none of that. A pane a human can watch is wanted for
+the same reason.
 
-## 테스트 전략
+Put differently: **all the complexity here is the price of a conversation that
+persists.** For one-shot questions, call `codex exec` directly instead.
 
-`bats` / `shellcheck` / `herdr` 에 의존하지 않는다. 두 계층으로 나눈다.
+## It does not kill an existing agent
 
-1. **상태 머신** — 의존성 주입으로 가짜 adapter 를 넣어 `agent.sh` 로직 검증
-2. **어댑터 계약** — `PATH` 앞에 가짜 `herdr` 실행 파일을 두고 **실제** `lib/herdr.sh`
-   를 실행해 인자·출력·비정상 응답 처리를 검증
+Replacing a live session can destroy work in progress, so `start` refuses by
+default and only replaces with `--replace`.
 
-`sleep` 과 현재 시각을 주입 가능하게 해서 전체가 2초 안에 끝난다.
+## Test strategy
+
+No dependency on `bats`, `shellcheck`, or a running herdr. Two layers:
+
+1. **State machine** — a fake adapter is injected to exercise `agent.sh`.
+2. **Adapter contract** — a fake `herdr` executable earlier on `PATH`, running
+   the *real* `lib/herdr.sh`, checks arguments, output, and malformed responses.
+
+`sleep` and the clock are injectable, so the whole suite finishes in about two
+seconds.

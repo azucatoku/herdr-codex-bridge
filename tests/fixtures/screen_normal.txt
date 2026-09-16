@@ -1,7 +1,7 @@
 user@host:~/proj$ codex
-› [cb-111-222-333] 2+2는?
+› [cb-111-222-333] what is 2+2?
 
-• 2+2는 4입니다.
+• 2+2 is 4.
 
 ───────────────────────────
 › Ask Codex to do anything

@@ -242,7 +242,7 @@ lib/agent.sh    delivery / submission / completion state machine
 bin/codex-bridge  dispatcher, owns the exit-code mapping
 ```
 
-See [docs/DESIGN.md](docs/DESIGN.md) (Korean) for the reasoning.
+See [docs/DESIGN.md](docs/DESIGN.md) for the reasoning.
 
 ## Tests
 

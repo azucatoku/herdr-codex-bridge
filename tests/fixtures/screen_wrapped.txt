@@ -1,8 +1,8 @@
-› [cb-777-888-999] 아주 긴 질문이라 화면 폭에서 감겨 여러 줄이 되었습니다
-  두 번째 줄로 이어진 질문 내용입니다
-  세 번째 줄까지 이어집니다
+› [cb-777-888-999] a question long enough that the terminal wraps it across
+  a second line of the question
+  and a third line
 
-• 답변 첫 줄입니다.
-  답변 둘째 줄입니다.
+• First line of the answer.
+  Second line of the answer.
 
 › Ask Codex to do anything

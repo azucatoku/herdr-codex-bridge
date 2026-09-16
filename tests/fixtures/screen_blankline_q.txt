@@ -1,7 +1,7 @@
-› [cb-333] 첫 질문 문단입니다
+› [cb-333] first paragraph of the question
 
-  빈 줄 뒤에 이어진 질문 문단입니다
+  a second paragraph after a blank line
 
-• 진짜 답변입니다.
+• The real answer.
 
 › Ask Codex to do anything

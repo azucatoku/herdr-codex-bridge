@@ -1,7 +1,7 @@
-› [cb-999] 다음을 검토하세요:
-  • 첫 번째 제약
-  • 두 번째 제약
+› [cb-999] review the following:
+  • first constraint
+  • second constraint
 
-• 실제 답변입니다.
+• The real answer.
 
 › Ask Codex to do anything

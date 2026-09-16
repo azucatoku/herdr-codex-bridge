@@ -1,4 +1,4 @@
-› [cb-555] 질문
+› [cb-555] question
 
 ⚠ Selected model is at capacity. Please try a different model.
 

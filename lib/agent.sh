@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# 에이전트 상호작용 상태 머신.
-# herdr 호출은 전부 lib/herdr.sh 를 통한다. 시간·대기는 주입 가능하다.
+# Agent interaction state machine. All herdr calls go through lib/herdr.sh.
+# Time and waiting are injectable so tests run instantly.
 
-: "${CB_SLEEP:=sleep}"          # 테스트에서 즉시 반환하는 것으로 교체 가능
+: "${CB_SLEEP:=sleep}"          # tests replace this with a no-op
 : "${CB_NOW:=cb::_now}"
 cb::_now() { date +%s; }
 
 cb::sleep() { "$CB_SLEEP" "$1"; }
 cb::now()   { "$CB_NOW"; }
 
-# 요청마다 고유 마커. 화면/상태 관측을 이번 요청에 귀속시키는 유일한 수단.
+# A unique marker per request — the only way to attribute an observed screen or
+# status to this request rather than to something already in the scrollback.
 agent::new_marker() { printf 'cb-%s-%s-%s' "$$" "$(cb::now)" "$((RANDOM))"; }
 
-# agent::wait_idle PANE LIMIT_SEC → 0 idle / 5 계속 working / 1 조회실패
+# agent::wait_idle PANE LIMIT_SEC -> 0 idle / 5 still working / 1 query failed
 agent::wait_idle() {
   local pane="$1" limit="$2" deadline st
   deadline=$(( $(cb::now) + limit ))
@@ -24,8 +25,9 @@ agent::wait_idle() {
   done
 }
 
-# agent::deliver PANE MARKER QUESTION → 0 확인됨 / 1 확인실패
-#   마커가 화면에 나타나면 전달된 것. 재전송은 하지 않는다(중복 실행 방지).
+# agent::deliver PANE MARKER QUESTION -> 0 confirmed / 1 unconfirmed
+#   The marker appearing on screen is the confirmation. Never resends: if the
+#   first send was merely slow, a resend runs the same question twice.
 agent::deliver() {
   local pane="$1" marker="$2" q="$3" window=10 deadline
   herdr::send_prompt "$pane" "[$marker] $q"
@@ -38,7 +40,9 @@ agent::deliver() {
 }
 
 # agent::ensure_submitted PANE MARKER
-#   마커가 입력창에 남아 있고 아직 제출 에코가 아니면 Enter 를 1회만 보낸다.
+#   Presses Enter once, and only with evidence that the marker is still sitting
+#   in the input box. Skipping that check sends a stray empty request whenever
+#   the text was already submitted.
 agent::ensure_submitted() {
   local pane="$1" marker="$2" screen
   screen=$(herdr::pane_text "$pane" 80)
@@ -50,7 +54,7 @@ agent::ensure_submitted() {
   return 0
 }
 
-# agent::wait_done PANE TIMEOUT_SEC → 0 완료 / 6 타임아웃 / 1 조회실패
+# agent::wait_done PANE TIMEOUT_SEC -> 0 done / 6 timed out / 1 query failed
 agent::wait_done() {
   local pane="$1" timeout="$2" deadline st
   deadline=$(( $(cb::now) + timeout ))
