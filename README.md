@@ -72,10 +72,37 @@ codex-bridge list
 | `writer` | `workspace-write` | Codex edits files directly |
 
 **Do not isolate the reviewer.** A second opinion has to see the code under
-review, so `advisor` attaches to the *same* working tree. Because it is
-read-only, two agents in one tree cannot collide. Use `writer` only when Codex
-should actually edit something; it still cannot touch `.git`, so commits stay
-with Claude.
+review, so `advisor` attaches to the *same* working tree. Read-only means it
+will not edit your files, so two agents in one tree do not fight over them. Use
+`writer` only when Codex should actually edit something; it still cannot touch
+`.git`, so commits stay with Claude.
+
+## Trust and limits
+
+**Answers are untrusted input.** They are a second opinion, not a verdict. Check
+each finding against the code before acting on it, drop the ones you can
+disprove, and keep ownership of the decision. This is not just about the model
+being wrong: whatever Codex reads in the working tree — `AGENTS.md`, project
+skills, a rules file, a comment in a source file — reaches it as *instructions*,
+not data. A repository can therefore steer its own reviewer.
+
+**What `advisor` does and does not guarantee.** `start -m advisor` launches
+Codex with `-s read-only -a never`, and those flags outrank any user or project
+config. But two gaps are worth knowing:
+
+- A `.rules` file with `decision = "allow"` lets matching commands run *outside*
+  the sandbox with no prompt, and the interactive Codex TUI has no
+  `--ignore-rules`. So "read-only" holds for ordinary config, not against rules
+  you have installed yourself.
+- `ask` talks to a pane; it does not inspect how that session was started. If
+  you point it at a `writer` session, or at a Codex someone launched by hand,
+  the read-only property is whatever *that* session got. Only sessions this tool
+  started as `advisor` carry the guarantee.
+
+**Flag surface is closed by construction.** The Codex command line is assembled
+from a fixed array, and unknown options are rejected rather than forwarded. A
+future write-enabling Codex flag cannot reach the sandbox through passthrough.
+This is an `advisor` invariant; `writer` is a deliberate exception.
 
 ## Exit codes
 
@@ -87,10 +114,14 @@ on the split.
 | 0 | Success |
 | 1 | Internal error, herdr failure, or the answer could not be extracted |
 | 2 | Bad arguments |
-| 3 | No such pane, or no agent running in it |
+| 3 | No pane, no agent in it, or the agent there is not Codex |
 | 4 | **Delivery unconfirmed** — it may well have arrived. Do not blindly retry |
 | 5 | Agent still busy, or the pane is locked by another `ask` |
 | 6 | Timed out (stdout holds a partial answer) |
+
+Errors that mean *no second opinion is available* (codes 3, and a missing
+`codex` CLI) also print a `FALLBACK:` line telling the caller to proceed
+without one, so an automated caller knows what to do next.
 
 Code 4 is deliberately *not* called "delivery failed". If the first send was
 merely slow, resending runs the same question twice — so `codex-bridge` never
