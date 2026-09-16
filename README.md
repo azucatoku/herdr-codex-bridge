@@ -247,7 +247,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the reasoning.
 ## Tests
 
 ```bash
-./tests/run.sh          # 28 checks, ~2s
+./tests/run.sh          # the whole suite, ~2s
 ./tests/run.sh render   # filter by name
 ```
 
