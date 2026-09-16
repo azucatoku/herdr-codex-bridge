@@ -1,4 +1,4 @@
-# codex-bridge
+# herdr-codex-bridge
 
 Ask OpenAI Codex a question from Claude Code, and get just the answer back.
 
@@ -38,8 +38,8 @@ Requires [herdr](https://herdr.dev), the
 and GNU `readlink -f`.
 
 ```bash
-git clone https://github.com/azucatoku/codex-bridge.git
-cd codex-bridge && ./install.sh          # symlinks into ~/.local/bin
+git clone https://github.com/azucatoku/herdr-codex-bridge.git
+cd herdr-codex-bridge && ./install.sh          # symlinks into ~/.local/bin
 ./install.sh uninstall
 ```
 
