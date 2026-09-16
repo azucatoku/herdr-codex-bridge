@@ -1,5 +1,7 @@
 # herdr-codex-bridge
 
+[![test](https://github.com/azucatoku/herdr-codex-bridge/actions/workflows/test.yml/badge.svg)](https://github.com/azucatoku/herdr-codex-bridge/actions/workflows/test.yml)
+
 Ask OpenAI Codex a question from Claude Code, and get just the answer back.
 
 Claude Code writes the code; Codex reads it from a second angle and pushes back.
@@ -253,7 +255,9 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the reasoning.
 ./tests/run.sh render   # filter by name
 ```
 
-No `bats`, no `shellcheck`, no running herdr. A fake `herdr` earlier on `PATH`
+No `bats`, no `shellcheck`, no running herdr, and no Codex — the suite supplies
+its own fakes, so it runs anywhere bash and python3 do, which is why CI needs no
+setup step. A fake `herdr` earlier on `PATH`
 exercises the real `lib/herdr.sh` and the real dispatcher — including the exact
 Codex command line each mode builds — while injected time keeps the state
 machine tests instant.

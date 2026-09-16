@@ -185,6 +185,9 @@ fi
 # read-only sandbox an invariant of advisor mode — this is what makes that a
 # tested claim rather than a stated one.
 echo "dispatcher"
+# start checks that codex exists before launching, so the suite must supply one.
+# Without this the tests would silently depend on the host having Codex installed.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$FAKE/codex"; chmod +x "$FAKE/codex"
 cat > "$FAKE/herdr" <<FAKE2
 #!/usr/bin/env bash
 echo "\$*" >> "$FAKE/argv.log"
