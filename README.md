@@ -38,7 +38,7 @@ Requires [herdr](https://herdr.dev), the
 and GNU `readlink -f`.
 
 ```bash
-git clone https://github.com/<you>/codex-bridge.git
+git clone https://github.com/azucatoku/codex-bridge.git
 cd codex-bridge && ./install.sh          # symlinks into ~/.local/bin
 ./install.sh uninstall
 ```
