@@ -1,105 +1,134 @@
 # codex-bridge
 
-Claude Code(주작업자)가 herdr 패널에 떠 있는 Codex(조언자)와 대화하기 위한 다리.
+Ask OpenAI Codex a question from Claude Code, and get just the answer back.
 
-Claude가 plan을 세운 뒤, 또는 한 phase를 끝낸 뒤 Codex에게 놓친 점을 묻는 흐름을
-한 줄로 만든다. 답변은 TUI 장식 없이 본문만 stdout으로 나온다.
+Claude Code writes the code; Codex reads it from a second angle and pushes back.
+`codex-bridge` is the plumbing between them — it runs Codex in a
+[herdr](https://herdr.dev) pane, delivers your question reliably, and prints the
+reply with none of the TUI noise around it.
 
-```bash
-codex-bridge start                       # 조언자(읽기전용)로 현재 디렉토리에 기동
-codex-bridge ask "이 설계에서 놓친 게 있나?"
+```console
+$ codex-bridge start
+$ codex-bridge ask "What does this design miss?"
+• The delivery check can't attribute an observation to a specific request.
+  If the same question is already in the scrollback, it reports success
+  before anything was actually sent.
 ```
 
-## 설치
+## Why this exists
+
+Calling `herdr agent prompt` directly fails **silently** in several ways. All of
+these were observed in practice, not imagined:
+
+1. A response of `agent_prompted` does not mean the text arrived.
+2. Text can land in the input box without ever being submitted.
+3. The `revision` field is a snapshot taken before the input is applied, so it
+   cannot be used to confirm delivery.
+4. Sending a command to a pane that already runs an agent types it **into that
+   agent's TUI**, not the shell.
+5. A terminal reply sequence left over from `Ctrl-C` corrupts the next command.
+6. Answers arrive buried in TUI chrome.
+
+`codex-bridge` handles all six, and tells you honestly when it cannot.
+
+## Install
+
+Requires [herdr](https://herdr.dev), the
+[Codex CLI](https://developers.openai.com/codex/cli), bash 4+, python3, `flock`,
+and GNU `readlink -f`.
 
 ```bash
-./install.sh            # ~/.local/bin 에 심볼릭 링크
+git clone https://github.com/<you>/codex-bridge.git
+cd codex-bridge && ./install.sh          # symlinks into ~/.local/bin
 ./install.sh uninstall
 ```
 
-링크이므로 저장소를 고치면 즉시 반영된다. `ask-codex` / `start-codex` 라는 이름으로도
-설치되어 각각 `ask` / `start` 하위 명령으로 연결된다.
+Symlinks, so edits to the checkout take effect immediately. `ask-codex` and
+`start-codex` are installed as aliases for `ask` and `start`.
 
-## 명령
+## Usage
 
 ```
 codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
-codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "질문"
+codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "question"
 codex-bridge list
 ```
 
-| 옵션 | 뜻 |
+| Flag | Meaning |
 |---|---|
-| `-m` | `advisor`(기본, 읽기전용) / `writer`(쓰기 가능) |
-| `-d` | 작업 디렉토리 (기본: 현재 위치) |
-| `-p` | 패널 지정 (기본: 자동 탐색 / 새 패널 분할) |
-| `-M` | 모델 (예: `gpt-6-astra`) |
-| `-t` | 응답 타임아웃 초, 기본 300 |
-| `-w` | 상대가 작업 중일 때 대기 한도 초, 기본 180 |
-| `--replace` | 이미 떠 있는 에이전트를 교체 |
+| `-m` | `advisor` (default, read-only) or `writer` (can edit files) |
+| `-d` | Working directory (default: current) |
+| `-p` | Target pane (default: auto-discover, or split a new one) |
+| `-M` | Model, e.g. `gpt-6-astra` |
+| `-t` | Answer timeout in seconds (default 300) |
+| `-w` | How long to wait if the agent is busy (default 180) |
+| `--replace` | Replace an agent already running in that pane |
 
-## 모드
+### Advisor and writer
 
-| 모드 | 샌드박스 | 용도 |
+| Mode | Sandbox | Use |
 |---|---|---|
-| `advisor` (기본) | `read-only` | Claude와 **같은 트리**에 붙여 리뷰. 쓰기 불가라 충돌 불가 |
-| `writer` | `workspace-write` | 가끔 직접 수정. `.git`은 막혀 있으므로 커밋은 Claude가 |
+| `advisor` (default) | `read-only` | Review. Same working tree as Claude |
+| `writer` | `workspace-write` | Codex edits files directly |
 
-Codex 를 worktree 나 clone 으로 격리하지 않는 것이 핵심이다. 조언자는 리뷰할 코드를
-봐야 하고, 읽기 전용이면 같은 트리에 있어도 충돌이 구조적으로 불가능하다.
-`writer` 는 Codex 가 직접 고쳐야 할 때만 쓴다.
+**Do not isolate the reviewer.** A second opinion has to see the code under
+review, so `advisor` attaches to the *same* working tree. Because it is
+read-only, two agents in one tree cannot collide. Use `writer` only when Codex
+should actually edit something; it still cannot touch `.git`, so commits stay
+with Claude.
 
-## 종료코드
+## Exit codes
 
-| 코드 | 의미 |
+`ask` prints the answer on stdout and diagnostics on stderr, so scripts can rely
+on the split.
+
+| Code | Meaning |
 |---|---|
-| 0 | 정상 |
-| 1 | 내부 오류 / herdr 실패 / 답변 추출 실패 |
-| 2 | 인자 오류 |
-| 3 | 패널 확보 실패 |
-| 4 | **전달 확인 실패** — 실제로는 전달됐을 수 있다. 무심코 재시도하지 말 것 |
-| 5 | 상대가 계속 작업 중이거나 패널이 잠김 |
-| 6 | 응답 타임아웃 (stdout은 부분 답변) |
+| 0 | Success |
+| 1 | Internal error, herdr failure, or the answer could not be extracted |
+| 2 | Bad arguments |
+| 3 | No such pane, or no agent running in it |
+| 4 | **Delivery unconfirmed** — it may well have arrived. Do not blindly retry |
+| 5 | Agent still busy, or the pane is locked by another `ask` |
+| 6 | Timed out (stdout holds a partial answer) |
 
-`ask` 의 stdout은 답변 본문만, stderr은 진단이다. 스크립트에서 이 분리에 의존해도 된다.
-(`start` 는 패널 ID를, `list` 는 표를 stdout 으로 낸다.)
+Code 4 is deliberately *not* called "delivery failed". If the first send was
+merely slow, resending runs the same question twice — so `codex-bridge` never
+retries on its own. Read the pane (`herdr pane read <pane>`) before deciding.
 
-## 왜 이렇게 만들었나
+## How it works
 
-`herdr agent prompt` 를 그냥 부르면 다음이 전부 조용히 어긋난다:
+Every request carries a unique marker:
 
-- 응답이 `agent_prompted` 여도 텍스트가 전달되지 않을 수 있다
-- 전달돼도 Enter가 눌리지 않아 입력창에 머문다
-- 응답의 `revision` 은 입력 반영 전 스냅샷이라 전달 판정에 쓸 수 없다
-- 이미 에이전트가 떠 있는 패널에 명령을 보내면 셸이 아니라 그 TUI 입력창으로 들어간다
-- Ctrl-C 직후 터미널 응답 시퀀스가 남아 다음 명령을 깨뜨린다
+```
+[cb:cb-12345-1757930000-4821] your question here
+```
 
-**요청마다 고유 마커를 질문 앞에 붙여** 관측한 화면과 상태를 그 요청에 귀속시키는 것이
-설계의 중심이다. scrollback에 같은 질문이 있어도, 답변이 질문을 재인용해도 오판하지
-않는다. 자세한 내용은 [docs/DESIGN.md](docs/DESIGN.md).
+Without it, nothing can be attributed to *this* request: an identical question
+sitting in the scrollback, a `working` state left over from a previous call, or
+a request that finished before the first poll all read as success. The marker
+settles delivery, submission, completion, and where the answer starts and ends.
 
-## 테스트
+```
+lib/herdr.sh    the only file that calls herdr
+lib/render.sh   pure function: screen text in, answer out
+lib/agent.sh    delivery / submission / completion state machine
+bin/codex-bridge  dispatcher, owns the exit-code mapping
+```
+
+See [docs/DESIGN.md](docs/DESIGN.md) (Korean) for the reasoning.
+
+## Tests
 
 ```bash
-./tests/run.sh          # 전체
-./tests/run.sh render   # 이름으로 필터
+./tests/run.sh          # 28 checks, ~2s
+./tests/run.sh render   # filter by name
 ```
 
-`bats` / `shellcheck` / `herdr` 없이 순수 bash로 돌고 2초 안에 끝난다. 가짜 `herdr` 를
-PATH 앞에 두고 실제 `lib/herdr.sh` 를 실행하는 계약 테스트와, 시간을 주입한 상태 머신
-테스트로 나뉜다.
+No `bats`, no `shellcheck`, no running herdr. Two layers: a fake `herdr` earlier
+on `PATH` exercises the real `lib/herdr.sh`, and injected time makes the state
+machine tests instant.
 
-## 구조
+## License
 
-```
-bin/codex-bridge   디스패처
-lib/herdr.sh       herdr API 어댑터 — 여기서만 herdr 를 직접 호출한다
-lib/render.sh      화면에서 답변 본문을 뽑는 순수 함수
-lib/agent.sh       전달·제출·완료 대기 상태 머신 (시간 주입 가능)
-tests/run.sh       테스트 러너
-```
-
-## 요구사항
-
-herdr, Codex CLI, bash 4+, python3, `flock`(util-linux), `readlink -f`(GNU coreutils).
-설치는 `~/.local/bin` 에 링크만 만든다.
+MIT

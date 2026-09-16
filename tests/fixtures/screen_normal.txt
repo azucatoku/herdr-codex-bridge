@@ -1,4 +1,4 @@
-azunyaa@box:~/proj$ codex
+user@host:~/proj$ codex
 › [cb-111-222-333] 2+2는?
 
 • 2+2는 4입니다.
