@@ -1,0 +1,4 @@
+{"id":"cli:agent:list","result":{"agents":[
+{"agent":"claude","agent_status":"working","cwd":"/home/u","pane_id":"w2:p1","revision":5},
+{"agent":"codex","agent_status":"idle","cwd":"/home/u/proj","pane_id":"w5:p1","revision":12}
+],"type":"agent_list"}}

@@ -14,9 +14,11 @@ hits=[i for i,l in enumerate(lines) if marker in l]
 if not hits:
     sys.exit(1)                      # 마커 없음 = 추출 실패 (빈 답변과 구분)
 
-# 마커는 질문 에코와 (줄바꿈으로 이어진) 본문에 걸쳐 나타날 수 있다.
-# 마지막 출현 이후를 답변 영역으로 본다.
-start=hits[-1]
+# 마커는 요청마다 고유하므로 이 요청의 입력 에코는 '›' 가 붙은 첫 출현이다.
+# 답변 본문이 질문을 재인용해 마커가 다시 나와도 앞부분을 잃지 않으려면
+# 마지막이 아니라 '첫' 에코를 기준으로 잘라야 한다.
+echoes=[i for i in hits if "›" in lines[i]]
+start=echoes[0] if echoes else hits[0]
 
 out=lines[start+1:]
 drop=re.compile(
