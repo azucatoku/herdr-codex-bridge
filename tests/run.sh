@@ -50,6 +50,10 @@ if t "render: 질문 중간에 빈 줄이 있어도 질문 문단이 답변에 �
   eq "$(render::answer cb-333 < "$FIX/screen_blankline_q.txt")" "• 진짜 답변입니다."
 fi
 
+if t "render: 질문에 불릿(•)이 들어 있어도 질문이 답변으로 새지 않음"; then
+  eq "$(render::answer cb-999 < "$FIX/screen_bullet_in_question.txt")" "• 실제 답변입니다."
+fi
+
 if t "render: 본문에 TUI 안내 문구가 인용돼도 그 줄을 지우지 않음"; then
   out=$(render::answer cb-444 < "$FIX/screen_chrome_in_body.txt")
   [[ "$out" == *"Ask Codex to do anything"* && "$out" == *"이 줄도 답변의 일부"* ]] \

@@ -21,8 +21,12 @@ start=echoes[0] if echoes else hits[0]
 
 # 답변은 "•" 로, Codex 자신의 경고/오류는 "⚠" 로 시작한다. 둘 다 본문으로 인정한다.
 # (경고를 본문에서 빼면 "답변이 오지 않았다"는 엉뚱한 진단이 나간다)
+#
+# 반드시 행 첫 칸이어야 한다. 질문이 여러 줄이면 TUI 가 이어지는 줄을 들여쓰므로,
+# 들여쓴 불릿은 아직 질문 영역이다. lstrip 으로 비교하면 질문에 "• ..." 가 들어간
+# 순간 그 줄부터 답변으로 오인해 질문 일부를 답변으로 돌려준다.
 begin=next((i for i in range(start+1, len(lines))
-            if lines[i].lstrip()[:1] in ("•", "⚠")), None)
+            if lines[i][:1] in ("•", "⚠")), None)
 if begin is None:
     print(""); sys.exit(0)           # 아직 답변이 도착하지 않음
 

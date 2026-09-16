@@ -104,6 +104,97 @@ from a fixed array, and unknown options are rejected rather than forwarded. A
 future write-enabling Codex flag cannot reach the sandbox through passthrough.
 This is an `advisor` invariant; `writer` is a deliberate exception.
 
+## Prompt recipes
+
+`codex-bridge` has one job: carry a question and bring the answer back. The
+useful part is what you put in the question. These are prompts, not features —
+copy, edit, throw away.
+
+### Challenge a design before you write code
+
+The cheapest review is the one that happens before there is any code. Ask for
+refutation only, never for a design: the moment the reviewer starts designing,
+you are merging two authors instead of getting a second pair of eyes.
+
+```bash
+codex-bridge ask -t 480 "Read docs/DESIGN.md. You are challenging premises, not designing.
+
+Return only three kinds of finding, each grounded in a file:line, a quoted
+premise, or a concrete scenario:
+
+1. REFUTE   — a premise that is false, unverified, or contradicted by the code.
+              Quote the premise, then the evidence.
+2. MISSING  — a constraint, failure mode, or stakeholder the design omits, and
+              why it would change the decision.
+3. ALTERNATIVE — a materially cheaper way to get most of the value, in 3 lines.
+              No blueprints.
+
+Read the repository to verify before asserting. Three grounded findings beat ten
+speculative ones. Do not restate the design, do not praise it, do not score it.
+End with exactly one line:
+VERDICT: <premise-hole | alternative-exists | no-objection>"
+```
+
+Discipline that matters more than the wording:
+
+- **One external voice, one pass.** Ask a second model and you become an
+  arbitrator of reviewers instead of the author of the design.
+- **Record each finding as adopted or rejected, one line each. Do not split the
+  difference.** A design half-bent toward an objection is usually worse than
+  either option.
+- On a confirmed `premise-hole`, go back to the design. That is the point.
+
+### Ask what to delete
+
+Tools grown by fixing one problem at a time accumulate branches nobody needs.
+Asking "what should I add" gets you a wish list; asking "what should I delete"
+gets you a diff.
+
+```bash
+codex-bridge ask -t 480 "Read bin/ and lib/. This tool has exactly one job: <one line>.
+
+Tell me only what to remove:
+- options, functions, or branches that are not needed for that one job
+- defensive code guarding a situation that cannot occur
+- two places doing the same thing that should be one
+- anything that looks removable but would break real usage if removed — say so
+
+No feature suggestions. File:line for each item."
+```
+
+The reviewer does not know your requirements, so treat its delete list as
+candidates. Keeping something it flagged is a fine answer when you can name the
+usage that justifies it.
+
+### Check that the reviewer actually read the file
+
+A review that never opened the file still sounds like a review. Before trusting
+a lens or a prompt, plant defects you already know about and see whether they
+come back with correct line numbers.
+
+```bash
+codex-bridge ask "Review <file>. It is N lines, sha256 <first 12 chars>.
+First confirm the line count and hash match; if they do not, report the mismatch
+instead of reviewing. Attach a line number and a verbatim quote to every finding.
+If there is no problem of this kind, say so."
+```
+
+Line numbers and the hash are the evidence that a specific file was read. A
+review with no line references is a review of nothing in particular.
+
+### Folding the answer back
+
+Do not paste raw output into whatever you are working on. Verify each finding
+against the code, drop the ones you can disprove, and report what survived:
+
+```
+Verdict: <CRITICAL | HIGH | MEDIUM | LOW | CLEAN>
+Findings: <one line each, confirmed only — say "+N more" rather than dropping silently>
+Next: <continue | stop | re-plan>
+```
+
+You own the verdict. See [Trust and limits](#trust-and-limits).
+
 ## Exit codes
 
 `ask` prints the answer on stdout and diagnostics on stderr, so scripts can rely
