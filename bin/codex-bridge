@@ -22,9 +22,13 @@ E_OK=0 E_INTERNAL=1 E_USAGE=2 E_NOPANE=3 E_UNDELIVERED=4 E_BUSY=5 E_TIMEOUT=6
 
 die() { echo "codex-bridge: $1" >&2; exit "${2:-$E_INTERNAL}"; }
 
+# 옵션에 값이 붙어 있는지 확인한다. 없으면 인자 오류로 즉시 끝낸다.
+need() { [[ -n "${2:-}" && "$2" != -* ]] || die "$1 에 값이 필요합니다" $E_USAGE; }
+
  usage() { sed -n '3,8p' "$CB_SELF" | sed 's/^# \?//'; }
 
 cmd_list() {
+  [[ $# -gt 0 ]] && die "list 는 인자를 받지 않습니다 ('$1')" $E_USAGE
   herdr::available || die "herdr 를 찾을 수 없습니다" $E_INTERNAL
   local rows; rows=$(herdr::list_agents) || die "herdr agent list 실패" $E_INTERNAL
   [[ -z "$rows" ]] && { echo "(실행 중인 에이전트 없음)"; return 0; }
@@ -38,12 +42,13 @@ cmd_ask() {
   local pane="" timeout=300 busy=180 retry=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -p) pane="${2:-}"; shift 2 ;;
-      -t) timeout="${2:-}"; shift 2 ;;
-      -w) busy="${2:-}"; shift 2 ;;
+      -p) need -p "${2:-}"; pane="$2"; shift 2 ;;
+      -t) need -t "${2:-}"; timeout="$2"; shift 2 ;;
+      -w) need -w "${2:-}"; busy="$2"; shift 2 ;;
       --retry) retry=1; shift ;;
       --) shift; break ;;
       -h|--help) usage; exit $E_OK ;;
+      -*) die "알 수 없는 옵션 '$1' (질문이 - 로 시작하면 -- 뒤에 쓰세요)" $E_USAGE ;;
       *) break ;;
     esac
   done
@@ -55,8 +60,10 @@ cmd_ask() {
   if [[ -z "$pane" ]]; then
     pane=$(herdr::find_agent codex) || die "herdr agent list 실패" $E_INTERNAL
     [[ -z "$pane" ]] && die "실행 중인 codex 패널을 찾지 못했습니다" $E_NOPANE
-  elif [[ -z "$(herdr::agent_kind "$pane")" ]]; then
-    die "$pane 에 실행 중인 에이전트가 없습니다" $E_NOPANE
+  else
+    local kind
+    kind=$(herdr::agent_kind "$pane") || die "herdr agent list 조회 실패" $E_INTERNAL
+    [[ -z "$kind" ]] && die "$pane 에 실행 중인 에이전트가 없습니다" $E_NOPANE
   fi
 
   # 패널별 잠금 — 동시 ask 가 관측을 뒤섞는 것을 막는다
@@ -85,21 +92,28 @@ cmd_ask() {
 
   agent::ensure_submitted "$pane" "$marker"
 
-  local timed_out=0
-  agent::wait_done "$pane" "$timeout" || timed_out=1
-  (( timed_out )) && echo "[codex-bridge] 타임아웃(${timeout}s) — 아래는 부분 답변" >&2
+  local timed_out=0 wrc=0
+  agent::wait_done "$pane" "$timeout" || wrc=$?
+  case $wrc in
+    0) ;;
+    6) timed_out=1; echo "[codex-bridge] 타임아웃(${timeout}s) — 아래는 부분 답변" >&2 ;;
+    *) die "응답 대기 중 상태 조회에 실패했습니다" $E_INTERNAL ;;
+  esac
 
   # 상태가 idle 로 바뀌어도 출력 flush 가 늦을 수 있다. 빈 답변을 성공으로
   # 반환하지 않도록 잠깐 기다렸다 몇 번 더 읽는다.
-  local screen answer="" rc=1
-  for _ in 1 2 3; do
-    screen=$(herdr::pane_text "$pane" 400)
+  local screen answer="" rc=1 lines
+  for lines in 400 400 2000; do        # 출력이 길어 마커가 밀렸으면 더 넓게 읽는다
+    screen=$(herdr::pane_text "$pane" "$lines")
     answer=$(printf '%s\n' "$screen" | render::answer "$marker") && rc=0 || rc=1
     [[ "$rc" == 0 && -n "$answer" ]] && break
     cb::sleep 2
   done
   if (( rc != 0 )); then
     die "답변을 추출하지 못했습니다 (마커 $marker 를 화면에서 찾을 수 없음)" $E_INTERNAL
+  fi
+  if [[ -z "$answer" ]]; then
+    die "답변이 아직 도착하지 않았습니다 (마커는 있으나 본문이 비어 있음)" $E_TIMEOUT
   fi
   printf '%s\n' "$answer"
   (( timed_out )) && exit $E_TIMEOUT
@@ -110,13 +124,13 @@ cmd_start() {
   local mode=advisor dir="$PWD" pane="" model="" replace=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -m) mode="${2:-}"; shift 2 ;;
-      -d) dir=$(cd "${2:-}" 2>/dev/null && pwd) || die "디렉토리 없음: ${2:-}" $E_USAGE; shift 2 ;;
-      -p) pane="${2:-}"; shift 2 ;;
-      -M) model="${2:-}"; shift 2 ;;
+      -m) need -m "${2:-}"; mode="$2"; shift 2 ;;
+      -d) need -d "${2:-}"; dir=$(cd "$2" 2>/dev/null && pwd) || die "디렉토리 없음: $2" $E_USAGE; shift 2 ;;
+      -p) need -p "${2:-}"; pane="$2"; shift 2 ;;
+      -M) need -M "${2:-}"; model="$2"; shift 2 ;;
       --replace) replace=1; shift ;;
       -h|--help) usage; exit $E_OK ;;
-      *) break ;;
+      *) die "예상치 못한 인자 '$1'" $E_USAGE ;;
     esac
   done
   local sandbox
@@ -138,7 +152,9 @@ cmd_start() {
 
   # 이미 에이전트가 떠 있으면 명령이 셸이 아니라 그 TUI 입력창으로 들어간다.
   # 작업 중인 세션을 파괴하지 않도록 기본은 거절한다.
-  local running; running=$(herdr::agent_kind "$pane")
+  local running
+  running=$(herdr::agent_kind "$pane") \
+    || die "$pane 의 에이전트 상태를 조회하지 못했습니다 (확인 없이 명령을 보내지 않습니다)" $E_INTERNAL
   if [[ -n "$running" ]]; then
     if (( ! replace )); then
       die "$pane 에 이미 $running 이(가) 실행 중입니다. 교체하려면 --replace" $E_BUSY
@@ -147,7 +163,9 @@ cmd_start() {
     local still=""
     for _ in 1 2 3; do
       herdr::send_key "$pane" C-c; cb::sleep 2
-      still=$(herdr::agent_kind "$pane"); [[ -z "$still" ]] && break
+      still=$(herdr::agent_kind "$pane") \
+        || die "$pane 의 에이전트 상태를 조회하지 못했습니다" $E_INTERNAL
+      [[ -z "$still" ]] && break
     done
     [[ -n "$still" ]] && die "$pane 의 기존 에이전트를 종료하지 못했습니다" $E_INTERNAL
     cb::sleep 1

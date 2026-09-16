@@ -61,7 +61,8 @@ Codex를 worktree나 clone으로 격리하지 않는 것이 핵심이다. 조언
 | 5 | 상대가 계속 작업 중이거나 패널이 잠김 |
 | 6 | 응답 타임아웃 (stdout은 부분 답변) |
 
-stdout은 답변 본문만, stderr은 진단. 스크립트에서 쓸 때 이 분리에 의존해도 된다.
+`ask` 의 stdout은 답변 본문만, stderr은 진단이다. 스크립트에서 이 분리에 의존해도 된다.
+(`start` 는 패널 ID를, `list` 는 표를 stdout 으로 낸다.)
 
 ## 왜 이렇게 만들었나
 
@@ -100,4 +101,5 @@ tests/run.sh       테스트 러너
 
 ## 요구사항
 
-herdr, Codex CLI, bash 4+, python3. 설치는 `~/.local/bin` 에 링크만 만든다.
+herdr, Codex CLI, bash 4+, python3, `flock`(util-linux), `readlink -f`(GNU coreutils).
+설치는 `~/.local/bin` 에 링크만 만든다.

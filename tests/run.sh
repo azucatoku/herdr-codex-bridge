@@ -41,15 +41,24 @@ if t "render: 마커가 없으면 빈 답변이 아니라 실패로 구분"; the
   printf '• 답변\n' | render::answer cb-없는마커 >/dev/null; code "$?" 1
 fi
 
-if t "render: TUI 장식이 답변에 섞이지 않음"; then
-  out=$(render::answer cb-111-222-333 < "$FIX/screen_normal.txt")
-  [[ "$out" == *"Ask Codex"* || "$out" == *"gpt-"* ]] \
-    && no "장식이 남았습니다: [$out]" || ok
-fi
-
 if t "render: 화면에 감긴 질문의 나머지 줄이 답변에 섞이지 않음"; then
   eq "$(render::answer cb-777-888-999 < "$FIX/screen_wrapped.txt")" \
      "$(printf '• 답변 첫 줄입니다.\n  답변 둘째 줄입니다.')"
+fi
+
+if t "render: 질문 중간에 빈 줄이 있어도 질문 문단이 답변에 섞이지 않음"; then
+  eq "$(render::answer cb-333 < "$FIX/screen_blankline_q.txt")" "• 진짜 답변입니다."
+fi
+
+if t "render: 본문에 TUI 안내 문구가 인용돼도 그 줄을 지우지 않음"; then
+  out=$(render::answer cb-444 < "$FIX/screen_chrome_in_body.txt")
+  [[ "$out" == *"Ask Codex to do anything"* && "$out" == *"이 줄도 답변의 일부"* ]] \
+    && ok || no "본문이 삭제됐습니다: [$out]"
+fi
+
+if t "render: 답변이 아직 없으면 성공하되 빈 문자열 (마커 없음과 구분)"; then
+  out=$(printf '› [cb-test] 질문\n\n› Ask Codex to do anything\n' | render::answer cb-test); rc=$?
+  [[ "$rc" == 0 && -z "$out" ]] && ok || no "코드 $rc, 출력 [$out]"
 fi
 
 if t "render: 제출 판정은 에코 줄('›')에 마커가 있을 때만"; then
@@ -200,11 +209,6 @@ if t "agent: 마커도 입력창도 없으면 Enter 를 보내지 않음"; then
   herdr::send_key()        { echo "$2" >> "$KEYS"; }
   agent::ensure_submitted w5:p1 cb-test
   eq "$(wc -c < "$KEYS")" "0"
-fi
-
-if t "render: 마커만 있고 답변이 아직 없으면 빈 문자열 (호출부가 재시도해야 함)"; then
-  out=$(printf '› [cb-test] 질문\n\n› Ask Codex to do anything\n' | render::answer cb-test)
-  eq "$out" ""
 fi
 
 printf '\n통과 %d  실패 %d\n' "$PASS" "$FAIL"
