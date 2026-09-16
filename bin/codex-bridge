@@ -184,6 +184,12 @@ cmd_start() {
   die "시간 내에 준비되지 않았습니다. herdr pane read $pane 로 확인하세요" $E_TIMEOUT
 }
 
+# ask-codex / start-codex 라는 이름으로 불리면 해당 하위 명령으로 매핑한다
+case "$(basename "$0")" in
+  ask-codex)   set -- ask "$@" ;;
+  start-codex) set -- start "$@" ;;
+esac
+
 case "${1:-}" in
   start) shift; cmd_start "$@" ;;
   ask)   shift; cmd_ask   "$@" ;;
