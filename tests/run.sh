@@ -47,6 +47,11 @@ if t "render: TUI 장식이 답변에 섞이지 않음"; then
     && no "장식이 남았습니다: [$out]" || ok
 fi
 
+if t "render: 화면에 감긴 질문의 나머지 줄이 답변에 섞이지 않음"; then
+  eq "$(render::answer cb-777-888-999 < "$FIX/screen_wrapped.txt")" \
+     "$(printf '• 답변 첫 줄입니다.\n  답변 둘째 줄입니다.')"
+fi
+
 if t "render: 제출 판정은 에코 줄('›')에 마커가 있을 때만"; then
   render::marker_submitted cb-111-222-333 < "$FIX/screen_normal.txt" && r1=0 || r1=1
   printf '  [cb-111-222-333] 입력창에만 있음\n' | render::marker_submitted cb-111-222-333 && r2=0 || r2=1
@@ -168,6 +173,38 @@ if t "agent: 마커가 끝내 안 보이면 전달 확인 실패 4 (자동 재�
   rc=$?
   n=$(wc -l < "$SENDS")
   [[ "$rc" == 4 && "$n" == 1 ]] && ok || no "코드 $rc, 전송 횟수 $n (기대: 4 / 1회)"
+fi
+
+if t "agent: 미제출이면 Enter 를 정확히 1회 보냄"; then
+  KEYS="$FAKE/keys"; : > "$KEYS"
+  herdr::pane_text()       { echo "  [cb-test] 질문이 입력창에만 있음"; }   # 에코(›) 아님
+  herdr::pane_input_area() { echo "  [cb-test] 질문이 입력창에만 있음"; }
+  herdr::send_key()        { echo "$2" >> "$KEYS"; }
+  agent::ensure_submitted w5:p1 cb-test
+  eq "$(cat "$KEYS")" "Enter"
+fi
+
+if t "agent: 이미 제출됐으면 Enter 를 보내지 않음"; then
+  KEYS="$FAKE/keys"; : > "$KEYS"
+  herdr::pane_text()       { echo "› [cb-test] 이미 제출된 질문"; }
+  herdr::pane_input_area() { echo "  (빈 입력창)"; }
+  herdr::send_key()        { echo "$2" >> "$KEYS"; }
+  agent::ensure_submitted w5:p1 cb-test
+  eq "$(wc -c < "$KEYS")" "0"
+fi
+
+if t "agent: 마커도 입력창도 없으면 Enter 를 보내지 않음"; then
+  KEYS="$FAKE/keys"; : > "$KEYS"
+  herdr::pane_text()       { echo "관련 없는 화면"; }
+  herdr::pane_input_area() { echo "관련 없는 화면"; }
+  herdr::send_key()        { echo "$2" >> "$KEYS"; }
+  agent::ensure_submitted w5:p1 cb-test
+  eq "$(wc -c < "$KEYS")" "0"
+fi
+
+if t "render: 마커만 있고 답변이 아직 없으면 빈 문자열 (호출부가 재시도해야 함)"; then
+  out=$(printf '› [cb-test] 질문\n\n› Ask Codex to do anything\n' | render::answer cb-test)
+  eq "$out" ""
 fi
 
 printf '\n통과 %d  실패 %d\n' "$PASS" "$FAIL"

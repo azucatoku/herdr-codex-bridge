@@ -89,9 +89,16 @@ cmd_ask() {
   agent::wait_done "$pane" "$timeout" || timed_out=1
   (( timed_out )) && echo "[codex-bridge] 타임아웃(${timeout}s) — 아래는 부분 답변" >&2
 
-  local screen answer
-  screen=$(herdr::pane_text "$pane" 400)
-  if ! answer=$(printf '%s\n' "$screen" | render::answer "$marker"); then
+  # 상태가 idle 로 바뀌어도 출력 flush 가 늦을 수 있다. 빈 답변을 성공으로
+  # 반환하지 않도록 잠깐 기다렸다 몇 번 더 읽는다.
+  local screen answer="" rc=1
+  for _ in 1 2 3; do
+    screen=$(herdr::pane_text "$pane" 400)
+    answer=$(printf '%s\n' "$screen" | render::answer "$marker") && rc=0 || rc=1
+    [[ "$rc" == 0 && -n "$answer" ]] && break
+    cb::sleep 2
+  done
+  if (( rc != 0 )); then
     die "답변을 추출하지 못했습니다 (마커 $marker 를 화면에서 찾을 수 없음)" $E_INTERNAL
   fi
   printf '%s\n' "$answer"

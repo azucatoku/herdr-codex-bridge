@@ -20,7 +20,12 @@ if not hits:
 echoes=[i for i in hits if "›" in lines[i]]
 start=echoes[0] if echoes else hits[0]
 
-out=lines[start+1:]
+# 질문이 화면 폭에 감기면 에코 줄 다음에 질문의 나머지가 이어진다.
+# 답변 불릿(•)이나 빈 줄이 나올 때까지는 아직 질문 영역이다.
+i=start+1
+while i < len(lines) and lines[i].strip() and not lines[i].lstrip().startswith("•"):
+    i+=1
+out=lines[i:]
 drop=re.compile(
     r"Ask Codex to do anything"
     r"|^\s*[─━]+\s*$"
