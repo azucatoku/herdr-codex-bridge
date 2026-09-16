@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# codex-bridge — Claude Code 에서 herdr 패널의 Codex 와 대화하는 다리.
+#
+#   codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
+#   codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] [--retry] "질문"
+#   codex-bridge list
+#
+# stdout 은 답변 본문만, stderr 은 진단. 종료코드는 README 참조.
+set -uo pipefail
+
+# 심볼릭 링크로 설치되므로 실경로 기준으로 lib 를 찾는다.
+CB_SELF=$(readlink -f "${BASH_SOURCE[0]}")
+CB_ROOT=$(dirname "$(dirname "$CB_SELF")")
+# shellcheck source=/dev/null
+source "$CB_ROOT/lib/herdr.sh"
+# shellcheck source=/dev/null
+source "$CB_ROOT/lib/render.sh"
+# shellcheck source=/dev/null
+source "$CB_ROOT/lib/agent.sh"
+
+E_OK=0 E_INTERNAL=1 E_USAGE=2 E_NOPANE=3 E_UNDELIVERED=4 E_BUSY=5 E_TIMEOUT=6
+
+die() { echo "codex-bridge: $1" >&2; exit "${2:-$E_INTERNAL}"; }
+
+ usage() { sed -n '3,8p' "$CB_SELF" | sed 's/^# \?//'; }
+
+lock_dir() { printf '%s' "${XDG_RUNTIME_DIR:-/tmp}/codex-bridge"; }
+
+cmd_list() {
+  herdr::available || die "herdr 를 찾을 수 없습니다" $E_INTERNAL
+  local rows; rows=$(herdr::list_agents) || die "herdr agent list 실패" $E_INTERNAL
+  [[ -z "$rows" ]] && { echo "(실행 중인 에이전트 없음)"; return 0; }
+  printf '%-8s %-8s %-9s %s\n' PANE AGENT STATUS CWD
+  printf '%s\n' "$rows" | while IFS=$'\t' read -r p a s c; do
+    printf '%-8s %-8s %-9s %s\n' "$p" "$a" "$s" "$c"
+  done
+}
+
+cmd_ask() {
+  local pane="" timeout=300 busy=180 retry=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p) pane="${2:-}"; shift 2 ;;
+      -t) timeout="${2:-}"; shift 2 ;;
+      -w) busy="${2:-}"; shift 2 ;;
+      --retry) retry=1; shift ;;
+      --) shift; break ;;
+      -h|--help) usage; exit $E_OK ;;
+      *) break ;;
+    esac
+  done
+  local q="${*:-}"
+  [[ -z "$q" ]] && die "질문이 없습니다" $E_USAGE
+  [[ "$timeout" =~ ^[0-9]+$ && "$busy" =~ ^[0-9]+$ ]] || die "-t/-w 는 초 단위 정수" $E_USAGE
+  herdr::available || die "herdr 를 찾을 수 없습니다" $E_INTERNAL
+
+  if [[ -z "$pane" ]]; then
+    pane=$(herdr::find_agent codex) || die "herdr agent list 실패" $E_INTERNAL
+    [[ -z "$pane" ]] && die "실행 중인 codex 패널을 찾지 못했습니다" $E_NOPANE
+  fi
+
+  # 패널별 잠금 — 동시 ask 가 관측을 뒤섞는 것을 막는다
+  local ld; ld=$(lock_dir); mkdir -p "$ld" 2>/dev/null
+  exec {lockfd}>"$ld/${pane//:/_}.lock" || die "잠금 파일 생성 실패" $E_INTERNAL
+  if ! flock -w 5 "$lockfd"; then
+    die "$pane 에 다른 ask 가 진행 중입니다" $E_BUSY
+  fi
+
+  agent::wait_idle "$pane" "$busy"
+  case $? in
+    5) die "$pane 이(가) ${busy}s 넘게 작업 중입니다. 끼어들지 않고 중단합니다 (-w 로 조정)" $E_BUSY ;;
+    1) die "$pane 상태를 조회하지 못했습니다" $E_INTERNAL ;;
+  esac
+
+  local marker; marker=$(agent::new_marker)
+  if ! agent::deliver "$pane" "$marker" "$q" 10; then
+    if (( retry )); then
+      echo "[codex-bridge] 재전송합니다 (--retry: 중복 실행 가능)" >&2
+      agent::deliver "$pane" "$marker" "$q" 10 \
+        || die "$pane 에 전달을 확인하지 못했습니다 (실제로는 전달됐을 수 있으니 재시도 전 화면을 확인하세요)" $E_UNDELIVERED
+    else
+      die "$pane 에 전달을 확인하지 못했습니다 (실제로는 전달됐을 수 있습니다. 중복 실행을 감수하려면 --retry)" $E_UNDELIVERED
+    fi
+  fi
+
+  agent::ensure_submitted "$pane" "$marker"
+
+  local timed_out=0
+  agent::wait_done "$pane" "$timeout" || timed_out=1
+  (( timed_out )) && echo "[codex-bridge] 타임아웃(${timeout}s) — 아래는 부분 답변" >&2
+
+  local screen answer
+  screen=$(herdr::pane_text "$pane" 400)
+  if ! answer=$(printf '%s\n' "$screen" | render::answer "$marker"); then
+    die "답변을 추출하지 못했습니다 (마커 $marker 를 화면에서 찾을 수 없음)" $E_INTERNAL
+  fi
+  printf '%s\n' "$answer"
+  (( timed_out )) && exit $E_TIMEOUT
+  return $E_OK
+}
+
+cmd_start() {
+  local mode=advisor dir="$PWD" pane="" model="" replace=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -m) mode="${2:-}"; shift 2 ;;
+      -d) dir=$(cd "${2:-}" 2>/dev/null && pwd) || die "디렉토리 없음: ${2:-}" $E_USAGE; shift 2 ;;
+      -p) pane="${2:-}"; shift 2 ;;
+      -M) model="${2:-}"; shift 2 ;;
+      --replace) replace=1; shift ;;
+      -h|--help) usage; exit $E_OK ;;
+      *) break ;;
+    esac
+  done
+  local sandbox
+  case "$mode" in
+    advisor) sandbox=read-only ;;
+    writer)  sandbox=workspace-write ;;
+    *) die "알 수 없는 모드 '$mode' (advisor|writer)" $E_USAGE ;;
+  esac
+  [[ -d "$dir" ]] || die "디렉토리 없음: $dir" $E_USAGE
+  herdr::available || die "herdr 를 찾을 수 없습니다" $E_INTERNAL
+
+  if [[ -z "$pane" ]]; then
+    local cur; cur=$(herdr::pane_current)
+    [[ -z "$cur" ]] && die "현재 패널을 찾지 못했습니다. -p 로 지정하세요" $E_NOPANE
+    pane=$(herdr::pane_split "$cur" right)
+    [[ -z "$pane" ]] && die "패널 분할 실패" $E_NOPANE
+    echo "[codex-bridge] 새 패널 $pane" >&2
+  fi
+
+  # 이미 에이전트가 떠 있으면 명령이 셸이 아니라 그 TUI 입력창으로 들어간다.
+  # 작업 중인 세션을 파괴하지 않도록 기본은 거절한다.
+  local running; running=$(herdr::agent_kind "$pane")
+  if [[ -n "$running" ]]; then
+    if (( ! replace )); then
+      die "$pane 에 이미 $running 이(가) 실행 중입니다. 교체하려면 --replace" $E_BUSY
+    fi
+    echo "[codex-bridge] $pane 의 $running 을(를) 종료하고 교체합니다" >&2
+    local still=""
+    for _ in 1 2 3; do
+      herdr::send_key "$pane" C-c; cb::sleep 2
+      still=$(herdr::agent_kind "$pane"); [[ -z "$still" ]] && break
+    done
+    [[ -n "$still" ]] && die "$pane 의 기존 에이전트를 종료하지 못했습니다" $E_INTERNAL
+    cb::sleep 1
+  fi
+
+  # Ctrl-C 후 남는 터미널 응답 시퀀스가 다음 명령을 깨뜨리므로 한 줄 비운다
+  herdr::send_key "$pane" Enter; cb::sleep 1
+
+  local cmd=(codex -s "$sandbox" -a never -C "$dir")
+  [[ -n "$model" ]] && cmd+=(-m "$model")
+  herdr::run "$pane" "${cmd[@]}"
+
+  # 준비 판정은 화면 마커가 아니라 "이 패널에 에이전트가 새로 등록됐는지"로 한다.
+  # (codex 는 alt-screen 을 쓰므로 기동 전 찍은 마커가 화면에서 사라진다)
+  # 기동 직전에 이 패널에 에이전트가 없음을 이미 확인했으므로, 등록 = 이번 기동이다.
+  local out kind
+  for _ in $(seq 1 25); do
+    out=$(herdr::pane_text "$pane" 40)
+    if grep -qE '^\s*Error|command not found|No such file or directory' <<<"$out"; then
+      echo "codex-bridge: 기동 실패:" >&2
+      grep -E '^\s*Error|command not found|No such file or directory' <<<"$out" | head -3 >&2
+      exit $E_INTERNAL
+    fi
+    grep -qE 'Do you trust|trust the contents' <<<"$out" && herdr::send_key "$pane" Enter
+    kind=$(herdr::agent_kind "$pane")
+    if [[ "$kind" == "codex" ]] && grep -q 'Ask Codex' <<<"$out"; then
+      echo "[codex-bridge] 준비 완료  pane=$pane  mode=$mode($sandbox)  dir=$dir" >&2
+      echo "$pane"
+      return $E_OK
+    fi
+    cb::sleep 3
+  done
+  die "시간 내에 준비되지 않았습니다. herdr pane read $pane 로 확인하세요" $E_TIMEOUT
+}
+
+case "${1:-}" in
+  start) shift; cmd_start "$@" ;;
+  ask)   shift; cmd_ask   "$@" ;;
+  list)  shift; cmd_list  "$@" ;;
+  -h|--help|"") usage ;;
+  *) die "알 수 없는 명령 '$1'" $E_USAGE ;;
+esac
