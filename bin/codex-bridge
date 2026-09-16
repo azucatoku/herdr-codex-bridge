@@ -24,8 +24,6 @@ die() { echo "codex-bridge: $1" >&2; exit "${2:-$E_INTERNAL}"; }
 
  usage() { sed -n '3,8p' "$CB_SELF" | sed 's/^# \?//'; }
 
-lock_dir() { printf '%s' "${XDG_RUNTIME_DIR:-/tmp}/codex-bridge"; }
-
 cmd_list() {
   herdr::available || die "herdr 를 찾을 수 없습니다" $E_INTERNAL
   local rows; rows=$(herdr::list_agents) || die "herdr agent list 실패" $E_INTERNAL
@@ -57,10 +55,12 @@ cmd_ask() {
   if [[ -z "$pane" ]]; then
     pane=$(herdr::find_agent codex) || die "herdr agent list 실패" $E_INTERNAL
     [[ -z "$pane" ]] && die "실행 중인 codex 패널을 찾지 못했습니다" $E_NOPANE
+  elif [[ -z "$(herdr::agent_kind "$pane")" ]]; then
+    die "$pane 에 실행 중인 에이전트가 없습니다" $E_NOPANE
   fi
 
   # 패널별 잠금 — 동시 ask 가 관측을 뒤섞는 것을 막는다
-  local ld; ld=$(lock_dir); mkdir -p "$ld" 2>/dev/null
+  local ld="${XDG_RUNTIME_DIR:-/tmp}/codex-bridge"; mkdir -p "$ld" 2>/dev/null
   exec {lockfd}>"$ld/${pane//:/_}.lock" || die "잠금 파일 생성 실패" $E_INTERNAL
   if ! flock -w 5 "$lockfd"; then
     die "$pane 에 다른 ask 가 진행 중입니다" $E_BUSY
@@ -153,15 +153,16 @@ cmd_start() {
   [[ -n "$model" ]] && cmd+=(-m "$model")
   herdr::run "$pane" "${cmd[@]}"
 
-  # 준비 판정은 화면 마커가 아니라 "이 패널에 에이전트가 새로 등록됐는지"로 한다.
-  # (codex 는 alt-screen 을 쓰므로 기동 전 찍은 마커가 화면에서 사라진다)
-  # 기동 직전에 이 패널에 에이전트가 없음을 이미 확인했으므로, 등록 = 이번 기동이다.
+  # 준비 판정: 에이전트 등록 + 입력창 표시를 모두 확인한다. 기동 직전에 이 패널에
+  # 에이전트가 없음을 확인했으므로 등록은 이번 기동의 것이다. (codex 는 alt-screen 을
+  # 쓰므로 기동 전에 찍은 화면 마커는 남지 않아 쓸 수 없다)
   local out kind
   for _ in $(seq 1 25); do
     out=$(herdr::pane_text "$pane" 40)
-    if grep -qE '^\s*Error|command not found|No such file or directory' <<<"$out"; then
-      echo "codex-bridge: 기동 실패:" >&2
-      grep -E '^\s*Error|command not found|No such file or directory' <<<"$out" | head -3 >&2
+    local errs
+    errs=$(grep -E '^\s*Error|command not found|No such file or directory' <<<"$out" | head -3)
+    if [[ -n "$errs" ]]; then
+      { echo "codex-bridge: 기동 실패:"; printf '%s\n' "$errs"; } >&2
       exit $E_INTERNAL
     fi
     grep -qE 'Do you trust|trust the contents' <<<"$out" && herdr::send_key "$pane" Enter

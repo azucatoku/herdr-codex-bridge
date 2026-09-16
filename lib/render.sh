@@ -18,15 +18,7 @@ if not hits:
 # 마지막 출현 이후를 답변 영역으로 본다.
 start=hits[-1]
 
-# 질문이 여러 줄로 감긴 경우, 이어지는 들여쓴 질문 줄들을 건너뛴다.
-i=start+1
-while i < len(lines):
-    s=lines[i].strip()
-    if not s:
-        i+=1; continue
-    break
-
-out=lines[i:]
+out=lines[start+1:]
 drop=re.compile(
     r"Ask Codex to do anything"
     r"|^\s*[─━]+\s*$"
