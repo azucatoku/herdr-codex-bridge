@@ -179,5 +179,44 @@ if t "agent: Enter is sent once, and only for input still in the box"; then
     && ok || no "unsubmitted=[$a] submitted=$b absent=$c"
 fi
 
+# --- dispatcher: run the real bin/ against a fake herdr -----------------------
+# The libraries above are exercised in isolation; this is the only place the
+# actual command line codex-bridge builds is asserted. The README calls the
+# read-only sandbox an invariant of advisor mode — this is what makes that a
+# tested claim rather than a stated one.
+echo "dispatcher"
+cat > "$FAKE/herdr" <<FAKE2
+#!/usr/bin/env bash
+echo "\$*" >> "$FAKE/argv.log"
+case "\$1 \$2" in
+  "agent list") printf '{"id":"x","result":{"agents":[],"type":"agent_list"}}\n' ;;
+  "pane read")  echo "Ask Codex to do anything" ;;
+  *) echo '{"result":{"type":"ok"}}' ;;
+esac
+FAKE2
+chmod +x "$FAKE/herdr"
+
+if t "dispatcher: advisor launches codex read-only with approvals off"; then
+  : > "$FAKE/argv.log"
+  PATH="$FAKE:$PATH" timeout 30 "$ROOT/bin/codex-bridge" start -p w5:p1 -d "$ROOT" >/dev/null 2>&1
+  grep -q -- "pane run w5:p1 codex -s read-only -a never -C $ROOT" "$FAKE/argv.log" \
+    && ok || no "launched as: $(grep 'pane run' "$FAKE/argv.log" | tail -1)"
+fi
+
+if t "dispatcher: writer is the only path that leaves read-only"; then
+  : > "$FAKE/argv.log"
+  PATH="$FAKE:$PATH" timeout 30 "$ROOT/bin/codex-bridge" start -p w5:p1 -m writer -d "$ROOT" >/dev/null 2>&1
+  grep -q -- "codex -s workspace-write -a never" "$FAKE/argv.log" \
+    && ok || no "launched as: $(grep 'pane run' "$FAKE/argv.log" | tail -1)"
+fi
+
+if t "dispatcher: bad arguments exit 2 without touching herdr"; then
+  : > "$FAKE/argv.log"
+  PATH="$FAKE:$PATH" "$ROOT/bin/codex-bridge" ask -p >/dev/null 2>&1; r1=$?
+  PATH="$FAKE:$PATH" "$ROOT/bin/codex-bridge" start -m bogus >/dev/null 2>&1; r2=$?
+  n=$(wc -c < "$FAKE/argv.log")
+  [[ "$r1" == 2 && "$r2" == 2 && "$n" == 0 ]] && ok || no "exits $r1/$r2, herdr bytes $n"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

@@ -102,7 +102,9 @@ config. But two gaps are worth knowing:
 **Flag surface is closed by construction.** The Codex command line is assembled
 from a fixed array, and unknown options are rejected rather than forwarded. A
 future write-enabling Codex flag cannot reach the sandbox through passthrough.
-This is an `advisor` invariant; `writer` is a deliberate exception.
+This is an `advisor` invariant; `writer` is a deliberate exception — and it is
+asserted in the test suite, which runs the real dispatcher against a fake
+`herdr` and checks the exact command line it builds.
 
 ## Prompt recipes
 
@@ -251,9 +253,15 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the reasoning.
 ./tests/run.sh render   # filter by name
 ```
 
-No `bats`, no `shellcheck`, no running herdr. Two layers: a fake `herdr` earlier
-on `PATH` exercises the real `lib/herdr.sh`, and injected time makes the state
+No `bats`, no `shellcheck`, no running herdr. A fake `herdr` earlier on `PATH`
+exercises the real `lib/herdr.sh` and the real dispatcher — including the exact
+Codex command line each mode builds — while injected time keeps the state
 machine tests instant.
+
+Tested against herdr 0.9.0 and Codex CLI 0.154.0. The bridge reads herdr's JSON
+and Codex's on-screen layout, so a different upstream version can break it in
+ways that surface as a timeout or an extraction failure rather than as a version
+error.
 
 ## License
 
