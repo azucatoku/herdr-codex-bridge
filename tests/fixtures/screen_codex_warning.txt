@@ -1,0 +1,5 @@
+› [cb-555] 질문
+
+⚠ Selected model is at capacity. Please try a different model.
+
+› Ask Codex to do anything

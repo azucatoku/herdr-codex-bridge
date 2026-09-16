@@ -56,6 +56,11 @@ if t "render: 본문에 TUI 안내 문구가 인용돼도 그 줄을 지우지 �
     && ok || no "본문이 삭제됐습니다: [$out]"
 fi
 
+if t "render: Codex 자신의 경고(⚠)도 본문으로 전달"; then
+  eq "$(render::answer cb-555 < "$FIX/screen_codex_warning.txt")" \
+     "⚠ Selected model is at capacity. Please try a different model."
+fi
+
 if t "render: 답변이 아직 없으면 성공하되 빈 문자열 (마커 없음과 구분)"; then
   out=$(printf '› [cb-test] 질문\n\n› Ask Codex to do anything\n' | render::answer cb-test); rc=$?
   [[ "$rc" == 0 && -z "$out" ]] && ok || no "코드 $rc, 출력 [$out]"

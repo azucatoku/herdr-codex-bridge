@@ -19,9 +19,10 @@ if not hits:
 echoes=[i for i in hits if "›" in lines[i]]
 start=echoes[0] if echoes else hits[0]
 
-# 답변은 항상 "•" 로 시작한다. 그 전까지는 (감겼든 빈 줄이 끼었든) 질문 영역이다.
+# 답변은 "•" 로, Codex 자신의 경고/오류는 "⚠" 로 시작한다. 둘 다 본문으로 인정한다.
+# (경고를 본문에서 빼면 "답변이 오지 않았다"는 엉뚱한 진단이 나간다)
 begin=next((i for i in range(start+1, len(lines))
-            if lines[i].lstrip().startswith("•")), None)
+            if lines[i].lstrip()[:1] in ("•", "⚠")), None)
 if begin is None:
     print(""); sys.exit(0)           # 아직 답변이 도착하지 않음
 
