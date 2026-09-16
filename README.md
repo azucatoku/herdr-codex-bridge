@@ -208,7 +208,7 @@ on the split.
 | 3 | No pane, no agent in it, or the agent there is not Codex |
 | 4 | **Delivery unconfirmed** — it may well have arrived. Do not blindly retry |
 | 5 | Agent still busy, or the pane is locked by another `ask` |
-| 6 | Timed out (stdout holds a partial answer) |
+| 6 | Timed out, or the answer never arrived. stdout holds a partial answer if one was on screen, nothing if not |
 
 Errors that mean *no second opinion is available* (codes 3, and a missing
 `codex` CLI) also print a `FALLBACK:` line telling the caller to proceed
@@ -227,9 +227,13 @@ Every request carries a unique marker:
 ```
 
 Without it, nothing can be attributed to *this* request: an identical question
-sitting in the scrollback, a `working` state left over from a previous call, or
-a request that finished before the first poll all read as success. The marker
-settles delivery, submission, completion, and where the answer starts and ends.
+sitting in the scrollback would read as a successful send, and the answer above
+it would be extracted as the reply. The marker settles **delivery**,
+**submission**, and **where the answer starts and ends**.
+
+Completion is a separate signal — the agent going back to `idle`/`done` — and it
+carries no marker. That is why a run can report done while the text is still
+being flushed, and why the answer is re-read a few times before it is trusted.
 
 ```
 lib/herdr.sh    the only file that calls herdr
