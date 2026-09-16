@@ -32,7 +32,6 @@ end=next((i for i in range(begin, len(lines)) if lines[i].lstrip().startswith("�
 
 drop=re.compile(r"^\s*[─━]+\s*$|^\s*gpt-[\w.\-]+ \w+ ·|^\s*─ Worked for ")
 kept=[l for l in lines[begin:end] if not drop.search(l)]
-while kept and not kept[0].strip(): kept.pop(0)
 while kept and not kept[-1].strip(): kept.pop()
 print("\n".join(kept))'
 }

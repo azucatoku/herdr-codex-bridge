@@ -176,17 +176,17 @@ fi
 if t "agent: 마커가 화면에 나타나면 전달 확인"; then
   herdr::send_prompt() { :; }
   herdr::pane_text() { echo "› [cb-test] 질문"; }
-  clock_reset; agent::deliver w5:p1 cb-test "질문" 10; code "$?" 0
+  clock_reset; agent::deliver w5:p1 cb-test "질문"; code "$?" 0
 fi
 
-if t "agent: 마커가 끝내 안 보이면 전달 확인 실패 4 (자동 재전송 없음)"; then
+if t "agent: 마커가 끝내 안 보이면 실패, 재전송하지 않음"; then
   SENDS="$FAKE/sends"; : > "$SENDS"
   herdr::send_prompt() { echo x >> "$SENDS"; }
   herdr::pane_text() { echo "관련 없는 화면"; }
-  clock_reset; agent::deliver w5:p1 cb-test "질문" 10
+  clock_reset; agent::deliver w5:p1 cb-test "질문"
   rc=$?
   n=$(wc -l < "$SENDS")
-  [[ "$rc" == 4 && "$n" == 1 ]] && ok || no "코드 $rc, 전송 횟수 $n (기대: 4 / 1회)"
+  [[ "$rc" != 0 && "$n" == 1 ]] && ok || no "코드 $rc, 전송 횟수 $n (기대: 0 아님 / 1회)"
 fi
 
 if t "agent: 미제출이면 Enter 를 정확히 1회 보냄"; then

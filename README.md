@@ -24,7 +24,7 @@ codex-bridge ask "이 설계에서 놓친 게 있나?"
 
 ```
 codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
-codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] [--retry] "질문"
+codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "질문"
 codex-bridge list
 ```
 
@@ -37,7 +37,6 @@ codex-bridge list
 | `-t` | 응답 타임아웃 초, 기본 300 |
 | `-w` | 상대가 작업 중일 때 대기 한도 초, 기본 180 |
 | `--replace` | 이미 떠 있는 에이전트를 교체 |
-| `--retry` | 전달 확인 실패 시 1회 재전송 (**중복 실행 가능**) |
 
 ## 모드
 
@@ -46,8 +45,9 @@ codex-bridge list
 | `advisor` (기본) | `read-only` | Claude와 **같은 트리**에 붙여 리뷰. 쓰기 불가라 충돌 불가 |
 | `writer` | `workspace-write` | 가끔 직접 수정. `.git`은 막혀 있으므로 커밋은 Claude가 |
 
-Codex를 worktree나 clone으로 격리하지 않는 것이 핵심이다. 조언자는 리뷰할 코드를
+Codex 를 worktree 나 clone 으로 격리하지 않는 것이 핵심이다. 조언자는 리뷰할 코드를
 봐야 하고, 읽기 전용이면 같은 트리에 있어도 충돌이 구조적으로 불가능하다.
+`writer` 는 Codex 가 직접 고쳐야 할 때만 쓴다.
 
 ## 종료코드
 

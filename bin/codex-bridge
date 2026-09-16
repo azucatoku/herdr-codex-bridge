@@ -2,7 +2,7 @@
 # codex-bridge — Claude Code 에서 herdr 패널의 Codex 와 대화하는 다리.
 #
 #   codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
-#   codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] [--retry] "질문"
+#   codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "질문"
 #   codex-bridge list
 #
 # stdout 은 답변 본문만, stderr 은 진단. 종료코드는 README 참조.
@@ -39,13 +39,12 @@ cmd_list() {
 }
 
 cmd_ask() {
-  local pane="" timeout=300 busy=180 retry=0
+  local pane="" timeout=300 busy=180
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -p) need -p "${2:-}"; pane="$2"; shift 2 ;;
       -t) need -t "${2:-}"; timeout="$2"; shift 2 ;;
       -w) need -w "${2:-}"; busy="$2"; shift 2 ;;
-      --retry) retry=1; shift ;;
       --) shift; break ;;
       -h|--help) usage; exit $E_OK ;;
       -*) die "알 수 없는 옵션 '$1' (질문이 - 로 시작하면 -- 뒤에 쓰세요)" $E_USAGE ;;
@@ -80,15 +79,8 @@ cmd_ask() {
   esac
 
   local marker; marker=$(agent::new_marker)
-  if ! agent::deliver "$pane" "$marker" "$q" 10; then
-    if (( retry )); then
-      echo "[codex-bridge] 재전송합니다 (--retry: 중복 실행 가능)" >&2
-      agent::deliver "$pane" "$marker" "$q" 10 \
-        || die "$pane 에 전달을 확인하지 못했습니다 (실제로는 전달됐을 수 있으니 재시도 전 화면을 확인하세요)" $E_UNDELIVERED
-    else
-      die "$pane 에 전달을 확인하지 못했습니다 (실제로는 전달됐을 수 있습니다. 중복 실행을 감수하려면 --retry)" $E_UNDELIVERED
-    fi
-  fi
+  agent::deliver "$pane" "$marker" "$q" \
+    || die "$pane 에 전달을 확인하지 못했습니다. 실제로는 전달됐을 수 있으니, 다시 보내기 전에 herdr pane read $pane 로 화면을 확인하세요" $E_UNDELIVERED
 
   agent::ensure_submitted "$pane" "$marker"
 
@@ -145,7 +137,7 @@ cmd_start() {
   if [[ -z "$pane" ]]; then
     local cur; cur=$(herdr::pane_current)
     [[ -z "$cur" ]] && die "현재 패널을 찾지 못했습니다. -p 로 지정하세요" $E_NOPANE
-    pane=$(herdr::pane_split "$cur" right)
+    pane=$(herdr::pane_split "$cur")
     [[ -z "$pane" ]] && die "패널 분할 실패" $E_NOPANE
     echo "[codex-bridge] 새 패널 $pane" >&2
   fi

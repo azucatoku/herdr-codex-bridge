@@ -24,16 +24,16 @@ agent::wait_idle() {
   done
 }
 
-# agent::deliver PANE MARKER QUESTION WINDOW_SEC → 0 확인됨 / 4 확인실패
-#   마커가 화면에 나타나면 전달된 것. 자동 재전송은 하지 않는다.
+# agent::deliver PANE MARKER QUESTION → 0 확인됨 / 1 확인실패
+#   마커가 화면에 나타나면 전달된 것. 재전송은 하지 않는다(중복 실행 방지).
 agent::deliver() {
-  local pane="$1" marker="$2" q="$3" window="${4:-10}" deadline
+  local pane="$1" marker="$2" q="$3" window=10 deadline
   herdr::send_prompt "$pane" "[$marker] $q"
   deadline=$(( $(cb::now) + window ))
   while :; do
     cb::sleep 2
     herdr::pane_text "$pane" 60 | render::has_marker "$marker" && return 0
-    (( $(cb::now) >= deadline )) && return 4
+    (( $(cb::now) >= deadline )) && return 1
   done
 }
 

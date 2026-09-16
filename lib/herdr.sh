@@ -65,6 +65,6 @@ except Exception: sys.exit(1)'
 }
 
 herdr::pane_current() { herdr pane current 2>/dev/null | herdr::_pane_id; }
-herdr::pane_split()   { herdr pane split "$1" --direction "${2:-right}" 2>/dev/null | herdr::_pane_id; }
+herdr::pane_split()   { herdr pane split "$1" --direction right 2>/dev/null | herdr::_pane_id; }
 
 herdr::available() { command -v herdr >/dev/null 2>&1; }
