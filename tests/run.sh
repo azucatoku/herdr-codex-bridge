@@ -213,6 +213,14 @@ if t "dispatcher: writer is the only path that leaves read-only"; then
     && ok || no "launched as: $(grep 'pane run' "$FAKE/argv.log" | tail -1)"
 fi
 
+if t "dispatcher: --version names the build without calling herdr"; then
+  : > "$FAKE/argv.log"
+  out=$(PATH="$FAKE:$PATH" "$ROOT/bin/codex-bridge" --version 2>&1); rc=$?
+  n=$(wc -c < "$FAKE/argv.log")
+  [[ "$rc" == 0 && "$out" == codex-bridge\ * && "$n" == 0 ]] \
+    && ok || no "exit $rc, herdr bytes $n, output [$out]"
+fi
+
 if t "dispatcher: bad arguments exit 2 without touching herdr"; then
   : > "$FAKE/argv.log"
   PATH="$FAKE:$PATH" "$ROOT/bin/codex-bridge" ask -p >/dev/null 2>&1; r1=$?

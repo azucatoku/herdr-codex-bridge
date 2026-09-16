@@ -41,12 +41,25 @@ and GNU `readlink -f`.
 
 ```bash
 git clone https://github.com/azucatoku/herdr-codex-bridge.git
-cd herdr-codex-bridge && ./install.sh          # symlinks into ~/.local/bin
+cd herdr-codex-bridge
+./install.sh              # copy into ~/.local/share/codex-bridge, link the commands
+./install.sh --link       # point the commands at this checkout (for development)
 ./install.sh uninstall
 ```
 
-Symlinks, so edits to the checkout take effect immediately. `ask-codex` and
-`start-codex` are installed as aliases for `ask` and `start`.
+The default installs a **copy**, so moving, editing or deleting the checkout
+afterwards cannot change or break the installed command — and `--version` can
+name exactly what is running:
+
+```console
+$ codex-bridge --version
+codex-bridge 0.1.0 (v0.1.0)
+installed: /home/you/.local/share/codex-bridge
+```
+
+Use `--link` while working on the tool itself; then edits take effect
+immediately and `--version` reports the checkout's current state instead.
+`ask-codex` and `start-codex` are installed as aliases for `ask` and `start`.
 
 ## Usage
 
@@ -54,6 +67,7 @@ Symlinks, so edits to the checkout take effect immediately. `ask-codex` and
 codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
 codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "question"
 codex-bridge list
+codex-bridge --version
 ```
 
 | Flag | Meaning |

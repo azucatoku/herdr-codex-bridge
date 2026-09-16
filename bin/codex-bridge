@@ -4,6 +4,7 @@
 #   codex-bridge start [-m advisor|writer] [-d DIR] [-p PANE] [-M MODEL] [--replace]
 #   codex-bridge ask   [-p PANE] [-t SEC] [-w SEC] "question"
 #   codex-bridge list
+#   codex-bridge --version
 #
 # stdout carries the answer only; stderr carries diagnostics. See README for exit codes.
 set -uo pipefail
@@ -33,6 +34,23 @@ die_no_second_opinion() {
 need() { [[ -n "${2:-}" && "$2" != -* ]] || die "$1 requires a value" $E_USAGE; }
 
  usage() { sed -n '3,8p' "$CB_SELF" | sed 's/^# \?//'; }
+
+# Which build is running, and from where. An installed copy records the commit
+# it was built from; a checkout reports its current state instead.
+cmd_version() {
+  [[ $# -gt 0 ]] && die "--version takes no arguments (got '$1')" $E_USAGE
+  local ver="unknown" commit="" where=""
+  [[ -r "$CB_ROOT/VERSION" ]] && ver=$(<"$CB_ROOT/VERSION")
+  if [[ -r "$CB_ROOT/BUILD" ]]; then
+    commit=$(<"$CB_ROOT/BUILD"); where="installed"
+  elif git -C "$CB_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    commit=$(git -C "$CB_ROOT" describe --always --dirty --tags 2>/dev/null)
+    where="development checkout"
+  fi
+  printf 'codex-bridge %s%s\n' "$ver" "${commit:+ ($commit)}"
+  [[ -n "$where" ]] && printf '%s: %s\n' "$where" "$CB_ROOT"
+  return $E_OK
+}
 
 cmd_list() {
   [[ $# -gt 0 ]] && die "list takes no arguments (got '$1')" $E_USAGE
@@ -215,6 +233,7 @@ case "${1:-}" in
   start) shift; cmd_start "$@" ;;
   ask)   shift; cmd_ask   "$@" ;;
   list)  shift; cmd_list  "$@" ;;
+  --version|-V) shift; cmd_version "$@" ;;
   -h|--help|"") usage ;;
   *) die "unknown command '$1'" $E_USAGE ;;
 esac
